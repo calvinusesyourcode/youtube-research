@@ -1,0 +1,154 @@
+<div>
+    <h1>hi</h1>
+  <canvas id="myChart"/>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.0"></script>
+<!-- <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-regression"></script> -->
+<!-- <script src="https://pomgui.github.io/chartjs-plugin-regression/dist/chartjs-plugin-regression-0.2.1.js"></script> -->
+<script src="https://cdn.jsdelivr.net/npm/luxon@^2.0.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@^1.0.0"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/regression/2.0.1/regression.min.js" integrity="sha512-0k6FXllQktdobw8Nc8KQN2WtZrOuxpMn7jC2RKCF6LR7EdOhhrg3H5cBPxhs3CFzQVlO6ni1B9SDLUPhBs0Alg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+
+<script>
+    const fixDate = (string) => new Date([string.substring(0, 4), string.substring(4, 6), string.substring(6, 8)])
+
+    fetch('videoData.json')
+    .then(response => response.json())
+    .then(videoData => {
+        const colors = [
+            'rgb(255, 99, 132)',
+            'rgb(255, 159, 64)',
+            'rgb(54, 162, 235)',
+            'rgb(75, 192, 192)',
+            'rgb(201, 203, 207)',
+            'rgb(255, 205, 86)',
+            'rgb(153, 102, 255)',
+        ]
+
+        // const solution = regression.polynomial(videoData.map((o) => [Number.parseInt(o.upload_date), o.view_count]), {order: 2})
+        // const newData = videoData.slice(0,10).map((o) => ({x: fixDate(o.upload_date), y: solution.predict(o.upload_date)[1]}))
+        
+        let data = {}
+        let channels = []
+
+        
+        for (const video of videoData) {
+            if (!(video.channel in data)) {
+                data[video.channel] = []
+                channels.push(video.channel)
+            }
+            // if (data[video.channel].length > 100) continue
+            data[video.channel].push({
+                x: Number.parseInt(video.upload_date),
+                y: video.view_count,
+                url: video.link,
+                title: video.title
+            })
+        }
+        console.log(`{${data[Object.keys(data)[0]].map((o)=>`{${o.x},${o.y}}`).join(',')}}`)
+        console.log(data[Object.keys(data)[0]].map((o)=>o.y))
+
+
+        const oldData = data
+
+        console.log(oldData)
+
+        for (const channel in data) {
+            data[channel].solution = regression.linear(data[channel].map((o) => [o.x, o.y]), {order: 3, precision: 1})
+            console.log(data[channel].solution)
+            for (const video of data[channel]) {
+                // console.log(video.x, video.y, data[channel].solution.predict(video.x)[1])
+                video.y = Number.parseInt(data[channel].solution.predict(video.x)[1])
+                video.x = fixDate(video.x.toString())
+            }
+        }
+
+        
+        
+
+        const calculateMovingAverage = (data, windowSize) => {
+            let result = [];
+            
+            for (let i = 0; i < data.length; i++) {
+                if (i < windowSize - 1) {
+                    result.push(data[i]);
+                } else {
+                    let sum = 0;
+                    for (let j = 0; j < windowSize; j++) {
+                        sum += data[i - j].y;
+                    }
+                    result.push({
+                        x: data[i].x,
+                        y: sum / windowSize,
+                        url: data[i].url,
+                        title: data[i].title
+                    });
+                }
+            }
+            
+            return result;
+        };
+
+
+        new Chart(document.getElementById("myChart"), {
+            type: 'scatter',
+            data: {
+                datasets: Object.keys(data).map((channel, i) => {
+                    console.log(channel, data[channel])
+                    return {
+                        label: channel,
+                        data: data[channel],
+                        borderColor: colors[i],
+                        fill: false,
+                    }
+                })
+            },
+            options: {
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'year' },
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'View Count'
+                        }
+                    }
+                },
+                tooltips: {
+                    callbacks: {
+                        label: function(tooltipItem, data) {
+                            console.log(`clicked tooltip`)
+                            console.log(tooltipItem, data)
+                            const dataset = data.datasets[tooltipItem.datasetIndex];
+                            const item = dataset.data[tooltipItem.index];
+                            return `${dataset.label}: ${item.y} views`;
+                        }
+                    }
+                },
+                onClick: function(evt, element) {
+                    console.log(`clicked`)
+                    console.log(`evt: ${evt}`)
+                    console.log(evt)
+                    console.log(element)
+                    if (element.length > 0) {
+                        const index = element[0].index;
+                        console.log(`index: ${index}`)
+                        const datasetIndex = element[0].datasetIndex;
+                        console.log(`datasetIndex: ${datasetIndex}`)
+                        const url = this.data.datasets[datasetIndex].data[index].url;
+                        if (url) window.location.href = url;
+                    }
+                }
+            },
+            
+        })
+    })
+</script>
